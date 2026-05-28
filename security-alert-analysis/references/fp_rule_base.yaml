@@ -1,0 +1,591 @@
+# ============================================================
+# 微步告警误报判定规则库 v2
+# ============================================================
+# 用途：compare_alerts.py 加载此配置进行批量 FP 判定
+# 维护：新增规则直接追加，无需改 Python 代码
+# 格式：每类规则含 name + patterns + reason
+
+# ============================================================
+# 一、高置信度误报 — 事件名称直接判定（无需看载荷）
+# ============================================================
+high_confidence_fp_names:
+  # -- AI/编程工具 --
+  - name: "识别到DeepSeek聊天"
+    reason: "AI聊天工具DeepSeek的正常使用流量，属正常业务行为"
+    category: "ai_tool"
+  - name: "识别到Cursor"
+    reason: "AI编程助手Cursor的正常API通信流量，属正常开发工具使用"
+    category: "ai_tool"
+  - name: "识别到千问聊天"
+    reason: "阿里千问AI聊天工具的正常使用流量，属正常业务行为"
+    category: "ai_tool"
+  - name: "识别到AutoClaw"
+    reason: "AI自动化工具的正常流量，属正常业务行为"
+    category: "ai_tool"
+
+  # -- 远程桌面/远控 --
+  - name: "向日葵远控"
+    reason: "向日葵是国内广泛使用的正规远程桌面软件，属正常运维/办公行为"
+    category: "remote_desktop"
+  - name: "TeamViewer远控"
+    reason: "TeamViewer是正规远程桌面软件，属正常办公行为"
+    category: "remote_desktop"
+  - name: "网易UU远控"
+    reason: "网易UU是游戏加速器，非恶意远控工具"
+    category: "remote_desktop"
+  - name: "RayLink远控"
+    reason: "RayLink是正规远程桌面工具"
+    category: "remote_desktop"
+  - name: "RustDesk远控"
+    reason: "RustDesk是开源远程桌面软件，属正常运维工具"
+    category: "remote_desktop"
+
+  # -- 内网穿透/VPN --
+  - name: "tailscale内网穿透"
+    reason: "Tailscale是基于WireGuard的企业级VPN方案，属正常网络管理"
+    category: "vpn_tunnel"
+  - name: "DynGate内网穿透"
+    reason: "DynGate是内网穿透工具，属正常网络管理"
+    category: "vpn_tunnel"
+  - name: "Parsec内网穿透"
+    reason: "Parsec是远程桌面/游戏串流工具"
+    category: "vpn_tunnel"
+  - name: "内网穿透工具通信"
+    reason: "内网穿透工具的正常加密通信流量"
+    category: "vpn_tunnel"
+
+  # -- 开发/CLI工具 --
+  - name: "curl Web客户端"
+    reason: "curl是标准CLI HTTP客户端，属正常开发/运维工具"
+    category: "dev_tool"
+  - name: "Python Web客户端"
+    reason: "Python脚本发起的HTTP请求，属正常开发/自动化行为"
+    category: "dev_tool"
+  - name: "httpx的HTTP请求"
+    reason: "httpx是Python HTTP客户端库的正常请求流量"
+    category: "dev_tool"
+
+  # -- 即时通讯 --
+  - name: "WhatsApp IM流量"
+    reason: "WhatsApp即时通讯的正常加密流量"
+    category: "im"
+
+  # -- 其他正常工具 --
+  - name: "识别到WorkBuddy"
+    reason: "WorkBuddy办公协作工具的正常流量"
+    category: "office_tool"
+  - name: "HTTP OPTIONS方法请求"
+    reason: "HTTP OPTIONS是标准CORS预检请求，属正常Web通信"
+    category: "web_standard"
+
+  # -- MQTT --
+  - name: "MQTT匿名连接"
+    reason: "MQTT协议的匿名连接，IoT设备常见行为，无攻击特征"
+    category: "iot_normal"
+  - name: "MQTT连接"
+    reason: "MQTT协议的设备连接，属IoT正常通信"
+    category: "iot_normal"
+
+# ============================================================
+# 二、真阳性 — 漏洞利用/真实攻击（需深度载荷分析确认）
+# ============================================================
+exploit_names:
+  - name: "React组件RCE探测(CVE-2025-55182)"
+    cve: "CVE-2025-55182"
+    cvss: 10.0
+    severity: "严重"
+    payload_indicators:
+      - "$1:__proto__:then"
+      - "__proto__"
+      - "constructor"
+      - "Next-Action"
+      - "X-Nextjs-Request-Id"
+      - "multipart/form-data"
+    analysis: "React Server Components反序列化RCE，CVSS 10.0，已在野利用"
+    recommendation_level: "强烈建议"
+
+  - name: "React组件远程代码执行攻击(CVE-2025-55182)"
+    cve: "CVE-2025-55182"
+    cvss: 10.0
+    severity: "严重"
+    payload_indicators:
+      - "$1:__proto__:then"
+      - "__proto__"
+    analysis: "同上，已确认的RCE攻击尝试"
+    recommendation_level: "强烈建议"
+
+  - name: "D-Link UPnP SOAP命令执行攻击"
+    cve: "CVE-2013-2670"
+    cvss: 9.8
+    severity: "严重"
+    payload_indicators:
+      - "soap.cgi"
+      - "AddPortMapping"
+      - "urn:schemas-upnp-org"
+    analysis: "D-Link路由器UPnP SOAP接口命令注入，无需认证远程命令执行"
+    recommendation_level: "建议"
+
+  - name: "Apache HTTPD多后缀解析攻击或敏感文件扫描"
+    cve: "CVE-2017-15715"
+    cvss: 7.5
+    severity: "高危"
+    payload_indicators:
+      - ".php."
+      - ".jsp."
+    analysis: "Apache多后缀解析绕过漏洞，可导致任意代码执行"
+    recommendation_level: "建议"
+
+  - name: "包含恶意链接:金蝉"
+    severity: "高危"
+    payload_indicators: []
+    analysis: "金蝉是已知恶意软件家族，需重点排查"
+    recommendation_level: "建议"
+
+  - name: "MySQL空口令登录失败"
+    severity: "中危"
+    payload_indicators: []
+    analysis: "空口令登录是明确的安全探测行为"
+    recommendation_level: "建议"
+
+  - name: "反向HTTP流量"
+    severity: "高危"
+    payload_indicators: []
+    analysis: "可能是C2通信或数据外传通道，需重点排查"
+    recommendation_level: "建议"
+
+  - name: "Laravel Framework env配置文件敏感信息泄露攻击(CVE-2017-16894)"
+    cve: "CVE-2017-16894"
+    cvss: 7.5
+    severity: "高危"
+    payload_indicators:
+      - ".env"
+    analysis: "Laravel .env文件包含数据库密码、APP_KEY等敏感信息"
+    recommendation_level: "建议"
+
+# ============================================================
+# 三、弱口令/认证类 — 中置信度真阳性
+# ============================================================
+weak_password_names:
+  - name: "IMAP登录(弱口令)"
+    protocol: "IMAP"
+    severity: "中危"
+    analysis: "IMAP邮件服务弱口令爆破，可能导致邮箱被控"
+  - name: "SMTP登录(弱口令)"
+    protocol: "SMTP"
+    severity: "中危"
+    analysis: "SMTP邮件服务弱口令爆破，可能被用于发送钓鱼邮件"
+  - name: "FTP登录(弱口令)"
+    protocol: "FTP"
+    severity: "中危"
+    analysis: "FTP弱口令登录可能导致文件泄露或篡改"
+  - name: "SSH登录(弱口令)"
+    protocol: "SSH"
+    severity: "高危"
+    analysis: "SSH弱口令登录可能导致服务器被完全控制"
+  - name: "HTTP登录失败(弱口令)"
+    protocol: "HTTP"
+    severity: "中危"
+    analysis: "Web应用弱口令登录尝试"
+  - name: "登录行为(弱口令)"
+    protocol: "通用"
+    severity: "中危"
+    analysis: "通用弱口令登录行为"
+
+# ============================================================
+# 四、中置信度判定规则 — 需载荷正反指标匹配
+# ============================================================
+medium_confidence_rules:
+
+  # -- 文件传输 --
+  - event_pattern: "文件传输行为"
+    fp_indicators:
+      - pattern: "windowsupdate\\.com"
+        description: "Windows Update 系统更新下载"
+      - pattern: "Microsoft-Delivery-Optimization"
+        description: "Windows Delivery Optimization P2P更新"
+      - pattern: "dl\\.delivery\\.mp\\.microsoft\\.com"
+        description: "Microsoft Delivery Optimization CDN"
+      - pattern: "updateleak\\.qihucdn\\.com"
+        description: "360安全卫士/软件管家配置更新"
+      - pattern: "/config/config\\.dat"
+        description: "软件配置文件拉取"
+      - pattern: "\\.exe\\?cacheHostOrigin="
+        description: "微软更新缓存分发下载"
+      - pattern: "\\.msi\\?cacheHostOrigin="
+        description: "微软MSI安装包分发"
+    attack_indicators:
+      - pattern: "\\.php\\?"
+        description: "PHP脚本文件传输"
+      - pattern: "webshell|shell\\.(jsp|asp|aspx|php)"
+        description: "可疑Webshell文件传输"
+      - pattern: "/etc/(passwd|shadow)"
+        description: "系统敏感文件传输"
+      - pattern: "eval\\(|exec\\(|system\\("
+        description: "命令执行痕迹"
+    default_judgment: "business_noise"
+
+  - event_pattern: "压缩文件传输"
+    fp_indicators:
+      - pattern: "windowsupdate\\.com"
+        description: "Windows Update"
+      - pattern: "Microsoft-Delivery-Optimization"
+        description: "Windows DO"
+    attack_indicators:
+      - pattern: "\\.(zip|tar\\.gz|rar|7z).*\\?(?!cacheHostOrigin)"
+        description: "可疑压缩包下载"
+    default_judgment: "business_noise"
+
+  # -- SSH --
+  - event_pattern: "SSH连接"
+    fp_indicators:
+      - pattern: ".*"
+        description: "SSH连接为运维管理基本手段，无暴力破解特征时视为正常"
+    attack_indicators:
+      - pattern: "root@"
+        description: "以root用户SSH登录（配合暴力破解判定）"
+      - pattern: "Failed password for"
+        description: "SSH登录失败（需关联分析）"
+    default_judgment: "business_noise"
+
+  # -- 爬虫/扫描 --
+  - event_pattern: "爬虫扫描行为"
+    fp_indicators:
+      - pattern: "(?i)(googlebot|baiduspider|bingbot|sogou|yandex|duckduckgo|slurp|facebookexternalhit|twitterbot)"
+        description: "搜索引擎/社交媒体爬虫"
+      - pattern: "(?i)Mozilla/5\\.0.*compatible.*(?:crawler|spider|bot)"
+        description: "声明了爬虫身份的流量"
+    attack_indicators:
+      - pattern: "(?i)(sqlmap|nikto|acunetix|nessus|burpsuite|appscan|awvs|netsparker)"
+        description: "已知安全扫描工具"
+      - pattern: "(?i)(admin|wp-admin|phpmyadmin|manager|config)"
+        description: "敏感路径扫描"
+      - pattern: "(\\.git/|\\.env|\\.svn/|WEB-INF/|\\.DS_Store)"
+        description: "敏感文件/目录扫描"
+    default_judgment: "business_noise"
+
+  # -- Friendly Scanner --
+  - event_pattern: "Friendly-Scanner扫描器"
+    fp_indicators:
+      - pattern: ".*"
+        description: "Friendly-Scanner是互联网常见的自动化扫描器，扫描目标随机"
+    attack_indicators: []
+    default_judgment: "false_positive"
+
+  # -- 端口扫描 (同一端口多主机) --
+  - event_pattern: "对不同主机的同一端口进行扫描"
+    fp_indicators:
+      - pattern: ".*"
+        description: "互联网背景噪声，无后续漏洞利用时属正常背景辐射"
+    attack_indicators:
+      - pattern: ".*"
+        description: "若同源IP后续产生漏洞利用告警则为真阳性"
+    default_judgment: "false_positive"
+
+  # -- 端口扫描 (单主机多端口) --
+  - event_pattern: "对单一主机的多端口进行扫描"
+    fp_indicators:
+      - pattern: ".*"
+        description: "若无后续漏洞利用，单次端口扫描可能是正常服务发现"
+    attack_indicators:
+      - pattern: ".*"
+        description: "若伴随漏洞利用payload则为真阳性"
+    default_judgment: "false_positive"
+
+  # -- HID VertX --
+  - event_pattern: "HID VertX控制器扫描"
+    fp_indicators: []
+    attack_indicators:
+      - pattern: "discover;013;"
+        description: "HID VertX设备发现协议命令"
+      - pattern: "4070"
+        description: "HID VertX默认端口"
+    default_judgment: "true_positive"
+
+  # -- Nmap扫描 --
+  - event_pattern: "出现Nmap扫描"
+    fp_indicators: []
+    attack_indicators:
+      - pattern: ".*"
+        description: "Nmap是专业网络扫描工具，属攻击前侦察阶段"
+    default_judgment: "true_positive"
+
+  # -- 僵尸网络扫描 --
+  - event_pattern: "僵尸网络扫描"
+    fp_indicators:
+      - pattern: ".*"
+        description: "多数僵尸网络扫描告警为互联网背景噪声"
+    attack_indicators:
+      - pattern: "discover;013;|AddPortMapping|soap\\.cgi|/cgi-bin/"
+        description: "伴随漏洞利用payload"
+    default_judgment: "false_positive"
+
+  # -- 敏感信息泄露 --
+  - event_pattern: "敏感信息泄露"
+    fp_indicators:
+      - pattern: "(?i)\\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|ttf|eot|woff2)"
+        description: "静态资源请求"
+      - pattern: "(?i)(text/html|application/xhtml).*(?:Firefox|Chrome|Safari|Edge)"
+        description: "正常浏览器页面请求"
+    attack_indicators:
+      - pattern: "(?i)(password|passwd|secret|token|apikey|api_key|credential|Authorization)"
+        description: "包含敏感关键词"
+      - pattern: "(?i)\\.git/config|\\.env$|\\.aws/credentials|id_rsa"
+        description: "敏感配置文件路径"
+      - pattern: "(?i)\\.sql$|\\.bak$|\\.backup$|dump\\.sql|\\.tgz$"
+        description: "数据库/源码备份文件"
+    default_judgment: "manual_review"
+
+  - event_pattern: "敏感信息泄露攻击"
+    fp_indicators:
+      - pattern: "(?i)\\.(css|js|png|jpg|jpeg|gif|svg|ico)"
+        description: "静态资源请求被误判"
+    attack_indicators:
+      - pattern: "(?i)(\\.git|\\.svn|\\.env|backup|\\.bak|\\.sql|config\\.php|wp-config)"
+        description: "敏感路径探测"
+    default_judgment: "manual_review"
+
+  # -- Basic Auth --
+  - event_pattern: "Basic Authentication认证"
+    fp_indicators:
+      - pattern: ".*"
+        description: "HTTP Basic Auth是标准认证协议，无暴力破解特征时属正常"
+    attack_indicators:
+      - pattern: "(?i)Authorization: Basic (?:YWRtaW46|dGVzdDp0ZXN0|cm9vdDpyb290|Z3Vlc3Q6Z3Vlc3Q|YWRtaW46YWRtaW4)"
+        description: "使用常见默认凭据"
+    default_judgment: "manual_review"
+
+  # -- RDP --
+  - event_pattern: "RDP连接"
+    fp_indicators:
+      - pattern: ".*"
+        description: "RDP是Windows远程管理标准协议"
+    attack_indicators:
+      - pattern: ".*"
+        description: "外部IP发起的RDP连接需重点关注"
+    default_judgment: "manual_review"
+
+  # -- Docker Registry --
+  - event_pattern: "Docker Registry未授权访问"
+    fp_indicators: []
+    attack_indicators:
+      - pattern: ".*"
+        description: "Docker Registry未授权可导致镜像被篡改或拖取"
+    default_judgment: "true_positive"
+
+  # -- 文件读取 --
+  - event_pattern: "文件读取攻击"
+    fp_indicators: []
+    attack_indicators:
+      - pattern: "(?i)(/etc/passwd|/etc/shadow|win\\.ini|web\\.config|\\.\\./)"
+        description: "路径遍历读取系统敏感文件"
+    default_judgment: "true_positive"
+
+# ============================================================
+# 五、业务流量白名单模式（从旧 BUSINESS_TRAFFIC_PATTERNS 迁移）
+# ============================================================
+business_traffic_patterns:
+  - name: "elasticsearch_monitoring"
+    display_name: "Elasticsearch 监控"
+    uri_patterns:
+      - "/_nodes/"
+      - "/_cluster/"
+      - "/health"
+      - "cluster_name"
+    payload_patterns: []
+    reason: "Elasticsearch 监控/管理接口正常访问"
+
+  - name: "redis_config"
+    display_name: "Redis 配置操作"
+    uri_patterns: []
+    payload_patterns:
+      - "HSET"
+      - "nsfocus:"
+      - "websafe:"
+      - ":configs:"
+      - "CONFIG"
+    reason: "Redis 正常配置操作"
+
+  - name: "http_proxy"
+    display_name: "HTTP 代理"
+    uri_patterns: []
+    payload_patterns:
+      - "CONNECT "
+      - "Tunnel"
+    reason: "HTTP CONNECT 隧道正常使用"
+
+  - name: "docker_registry"
+    display_name: "Docker 镜像仓库"
+    uri_patterns:
+      - "/v2/"
+      - "/manifests/"
+      - "docker/"
+    payload_patterns: []
+    reason: "Docker Registry 镜像仓库正常访问"
+
+  - name: "health_check"
+    display_name: "健康检查端点"
+    uri_patterns:
+      - "/health"
+      - "/metrics"
+      - "/status"
+      - "/ping"
+    payload_patterns: []
+    reason: "监控健康检查端点正常访问"
+
+  - name: "api_gateway"
+    display_name: "API 网关"
+    uri_patterns:
+      - "/api/"
+      - "/v1/"
+      - "/v2/"
+      - "swagger"
+      - "openapi"
+    payload_patterns: []
+    reason: "API 网关正常调用"
+
+# ============================================================
+# 六、攻击特征库（扩展版）
+# ============================================================
+attack_features:
+  sql_injection:
+    patterns:
+      - "UNION SELECT"
+      - " OR 1=1"
+      - "' OR '"
+      - "\" OR \""
+      - "DROP TABLE"
+      - "INSERT INTO"
+      - "UPDATE SET"
+      - "DELETE FROM"
+      - "information_schema"
+      - "SLEEP("
+      - "BENCHMARK("
+      - "WAITFOR DELAY"
+      - "pg_sleep"
+      - "xp_cmdshell"
+      - "LOAD_FILE"
+      - "INTO OUTFILE"
+      - "CHAR("
+      - "CONCAT("
+      - "GROUP_CONCAT"
+      - "0x[0-9a-fA-F]{8,}"
+
+  xss:
+    patterns:
+      - "<script"
+      - "javascript:"
+      - "onerror="
+      - "onload="
+      - "onclick="
+      - "onmouseover="
+      - "onfocus="
+      - "onblur="
+      - "alert("
+      - "prompt("
+      - "confirm("
+      - "document\\.cookie"
+      - "document\\.write"
+      - "eval\\(.*\\)"
+      - "<img.*onerror"
+      - "<svg.*onload"
+      - "String\\.fromCharCode"
+
+  rce:
+    patterns:
+      - ";cat "
+      - ";ls "
+      - ";id"
+      - ";whoami"
+      - ";uname"
+      - ";pwd"
+      - ";wget "
+      - ";curl "
+      - "|cat "
+      - "|ls "
+      - "|id"
+      - "`id`"
+      - "$(whoami)"
+      - "eval("
+      - "exec("
+      - "system("
+      - "passthru("
+      - "shell_exec("
+      - "popen("
+      - "proc_open("
+      - "Runtime\\.getRuntime"
+      - "ProcessBuilder"
+      - "cmd\\.exe"
+      - "/bin/bash"
+      - "/bin/sh"
+      - "__proto__"
+      - "constructor"
+
+  path_traversal:
+    patterns:
+      - "../"
+      - "..%2f"
+      - "..%5c"
+      - "%2e%2e"
+      - "/etc/passwd"
+      - "/etc/shadow"
+      - "/windows/win.ini"
+      - "C:\\\\Windows"
+      - "..\\\\"
+      - "....//"
+      - "....\\\\"
+      - "file:///"
+      - "WEB-INF/web\\.xml"
+      - "\\.git/HEAD"
+      - "\\.env"
+
+  ssrf:
+    patterns:
+      - "127\\.0\\.0\\.1"
+      - "localhost"
+      - "0\\.0\\.0\\.0"
+      - "169\\.254\\.169\\.254"
+      - "metadata\\.google\\.internal"
+      - "file://"
+      - "gopher://"
+      - "dict://"
+      - "internal\\.\\w+\\.com"
+
+  csrf:
+    patterns:
+      - "<form.*action.*http"
+      - "XMLHttpRequest"
+      - "fetch\\("
+      - "Content-Type: application/x-www-form-urlencoded"
+
+# ============================================================
+# 七、编码绕过检测配置
+# ============================================================
+encoding_detection:
+  max_depth: 3  # 最多递归解码层数
+  encodings:
+    - type: "URL编码"
+      priority: 1
+      detection_pattern: "%[0-9A-Fa-f]{2}"
+      decoder: "urldecode"
+    - type: "Hex编码"
+      priority: 2
+      detection_pattern: "\\\\x[0-9A-Fa-f]{2}"
+      decoder: "hex_decode"
+    - type: "Unicode编码"
+      priority: 3
+      detection_pattern: "\\\\u[0-9A-Fa-f]{4}"
+      decoder: "unicode_decode"
+    - type: "Base64编码"
+      priority: 4
+      detection_pattern: "^[A-Za-z0-9+/]+=*$"
+      decoder: "base64_decode"
+      min_length: 4
+      require_multiple_of_4: true
+    - type: "HTML实体编码"
+      priority: 5
+      detection_pattern: "&#\\d+;|&#x[0-9A-Fa-f]+;"
+      decoder: "html_entity_decode"
+    - type: "双重URL编码"
+      priority: 6
+      detection_pattern: "%25[0-9A-Fa-f]{2}"
+      decoder: "double_urldecode"

@@ -1,0 +1,53 @@
+{
+  "skill_name": "security-alert-analysis",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我手头有一批安全设备的告警日志，绿盟和微步的都有，CSV 格式，GB18030 编码，放在 ./log 目录下。文件名形如 绿盟事件研判_0001_20260519_092200_to_20260519_092356.csv 和 微步事件研判_0001_20260519_092213_to_20260519_092518.csv，按时间段分了若干个小文件。帮我把这些日志全跑一遍，对比绿盟和微步在同一时段的检测覆盖差异，对微步独有的告警做误报判定，最后给我一份 Word 分析报告，输出到 ./report。",
+      "expected_output": "调用 main.py --log_dir ./log --output ./report；自动配对、四元组对齐、对微步独有告警逐条做误报判定（包括按攻击类型查询对应 cookbook）、生成 Word 报告。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "我们 IDS 团队对内部 NSFOCUS 和 ThreatBook 两台设备的检测能力有疑问，运维导出了一对 CSV：./alerts/绿盟事件研判_0001_20260519_092200_to_20260519_092356.csv 和 ./alerts/微步事件研判_0001_20260519_092213_to_20260519_092518.csv。这两份是同一时段的流量。能帮我对一下吗，重点关注微步报了但绿盟没报的告警里有多少是真的攻击，有多少是误报？另外微步独有的真阳性里如果有 SQL 注入或者 RCE 这种高危的，我希望能拿到补绿盟规则的建议。",
+      "expected_output": "用 main.py 传统模式（--lvmeng/--weibu）；时间关联判定为关联 → 对比分析；微步独有告警按攻击类型读取 cookbook_sql_injection.md / cookbook_command_injection.md；输出包含误报率、真阳性高危项以及绿盟补规则建议（按强烈建议/建议/可以忽略分档）。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "我同事甩了两份日志给我让我对比下，一份是绿盟的 09:22:00 到 09:23:56 的，另一份是微步的 09:30:00 到 09:31:00 的。我感觉这俩时间不挨着对不上吧？你看看到底能不能比，如果不能就分别分析下两边各自的告警情况也行。",
+      "expected_output": "时间关联判定为不关联（完全分离，间隔 6+ 分钟）；不做四元组对比，自动走 analyze_single_vendor.py 分别对两个文件做独立分析；输出两份 JSON 结果并说明不关联原因。",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "微步今天报了几百条 XSS 告警，请求体里都是 <script>alert(1)</script> 这种，但是我看了几条响应体里都是 404 或者没回显，感觉好多是扫描器在批量探测被规则误打中了。CSV 在 ./微步事件研判_0007_20260519_140000_to_20260519_141500.csv，能帮我把这批微步独有的 XSS 告警过一遍误报判定吗？置信度和理由都标出来。",
+      "expected_output": "识别为单文件 + 仅微步 + XSS 主题；读取 references/cookbook_xss.md 和 false_positive_rules.md；对每条告警输出置信度（高/中/低）、是否误报（是/否/需人工审核）、误报原因（含响应码、响应体特征、是否扫描器 UA 等证据）。",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "log 目录下有 8 个 CSV，绿盟 3 个微步 5 个，时间段大致是早上 9-10 点之间。我估计有些能配上、有些可能配不上。请帮我自动跑完整流程，每对配上的输出对比报告，没配上的单独分析下，最后所有结果都汇总到 ./out。",
+      "expected_output": "main.py --log_dir ./log --output ./out 自动模式；扫描 8 个文件、解析时间、两轮配对（先跨厂商再同厂商）；每对生成 配对N/绿盟_vs_微步_分析报告.docx；未配对文件生成 单独分析_<厂商>/<厂商>_analysis_result.json；未配对厂商数据回填到对应配对报告的优势项。",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "运维刚把一对全量日志丢给我了，绿盟和微步各一个大 CSV，时间段都是 09:00-10:00，每个文件 25000 行左右、加起来快 8MB。我之前的 1k 行小样本你帮我跑过一次没问题，但这次量太大单次跑怕你卡住，能不能拆开并行处理？最后还是要一份完整的 Word 报告，并且统计数字要按全量算，不是各跑各的平均。",
+      "expected_output": "识别为大文件（行数 > 10000）→ 触发大文件分片处理流程：调用 split_by_time_pair.py 按 5min 窗口切分 → 主代理读 manifest_pair.json 按 ≤4/批 dispatch 子代理并发跑 compare_alerts.py → aggregate_chunk_results.py 聚合得到 final_compare_result.json（字段同构于 compare_result.json）→ 主代理对 boundary_seam_candidates 做二次研判并回填 → generate_report.py 出最终 docx。final.summary.lvmeng_total_alerts 应严格等于 25000、weibu_total_alerts 应严格等于 22000；每 chunk lvmeng_rows ≤ 10000 且 weibu_rows ≤ 10000；全局 TOP-5 源 IP 与不分片基线差异 ≤ 1 排位；误报率与基线绝对差 ≤ 0.5 个百分点。",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "我这有一份微步 CSV，09:30-09:35 这 5 分钟里居然有 15000 条告警（应该是被人压力扫描了），配套绿盟文件大小正常。直接走分片会不会一个桶就爆掉 1w 上限？",
+      "expected_output": "split_by_time_pair.py 检测到单个 5min 桶超 max_rows=10000 → 触发时间二分递归细切（subdivide_if_needed）→ 所有 chunk 行数 ≤ 10000；manifest_pair.json 中存在 window_sec < 300 的 chunk；除非数据全部集中在同一秒否则 hard_split 应为 false（时间二分应能完成）。",
+      "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "我这有一对大文件，绿盟是 08:00-09:00 那一段，微步是 11:00-12:00 那一段，差了俩小时。但每个文件都几万行，单跑也跑不动。能不能用你那个分片并行的脑子帮我处理一下？",
+      "expected_output": "split_by_time_pair.py 检测到两文件时间域不重叠 → 写 manifest_pair.json {\"should_split\": false, \"reason\": \"no_overlap\"} 并 short-circuit；不生成 chunks/cNNNN 子目录；调用方退化到对每个文件分别跑 analyze_single_vendor.py（亦可按大文件单厂商场景再次切分单厂商文件，但**不进入** aggregate_chunk_results.py 的聚合分支）。",
+      "files": []
+    }
+  ]
+}

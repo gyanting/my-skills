@@ -1,0 +1,203 @@
+# ============================================================
+# 漏洞知识库 v1
+# ============================================================
+# 用途：generate_report.py 加载此知识库，填充报告的漏洞分析部分
+# 维护：新增漏洞时，按现有结构追加条目
+# 字段说明：
+#   cve: CVE 编号（无则填 N/A）
+#   cvss: CVSS v3 评分（0-10）
+#   severity: 严重程度（严重/高危/中危/低危）
+#   affected: 影响系统/软件
+#   principle: 攻击原理简述
+#   detection_indicators: 检测特征（用于规则编写）
+#   recommendation_level: 强烈建议 / 建议 / 可以忽略
+#   recommendation_reason: 建议理由
+#   rule_example: Suricata/IPS 规则示例
+#   references: 参考链接
+
+vulnerabilities:
+
+  - name: "React Server Components 远程代码执行 (CVE-2025-55182)"
+    match_events:
+      - "React组件RCE探测(CVE-2025-55182)"
+      - "React组件远程代码执行攻击(CVE-2025-55182)"
+    cve: "CVE-2025-55182"
+    cvss: 10.0
+    severity: "严重"
+    affected: "React 19.x / Next.js 15.x / 使用 React Server Components 的应用"
+    principle: >
+      CVE-2025-55182 是 React Server Components 的反序列化漏洞。
+      攻击者通过构造恶意的 multipart/form-data 请求，在请求体中注入包含
+      __proto__ 原型污染和 $1:__proto__:then 的 JSON payload，
+      利用 React Flight 协议的反序列化机制，在服务端实现任意代码执行。
+      该漏洞无需认证，攻击复杂度低，CVSS 10.0，已在野大规模利用。
+    detection_indicators:
+      - "HTTP Header: Next-Action, X-Nextjs-Request-Id, X-Nextjs-Html-Request-Id"
+      - "Content-Type: multipart/form-data"
+      - "请求体含: {\"then\":\"$1:__proto__:then\""
+      - "请求体含: __proto__, constructor, $B 引用"
+      - "目标端口: 5000, 3000 等非标准HTTP端口"
+      - "行为: 同源IP短时间内对多目标5000端口发起POST请求"
+    recommendation_level: "强烈建议"
+    recommendation_reason: "CVSS 10.0、无需认证、攻击复杂度低、已在野利用、CISA KEV收录。应在1-2周内补充检测规则。"
+    rule_example: |
+      alert http $EXTERNAL_NET any -> $HOME_NET [5000,3000] (
+        msg:"CVE-2025-55182 React RCE Exploit";
+        flow:to_server,established;
+        content:"Next-Action|3a 20|x"; http_header;
+        content:"X-Nextjs-Request-Id|3a 20|"; http_header;
+        content:"__proto__"; http_client_body;
+        content:"|24 31 3a|__proto__|3a|then"; http_client_body;
+        classtype:web-application-attack;
+        sid:1000001; rev:1;
+      )
+    references:
+      - "https://nvd.nist.gov/vuln/detail/CVE-2025-55182"
+      - "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
+
+  - name: "HID VertX 控制器漏洞扫描"
+    match_events:
+      - "HID VertX控制器扫描"
+      - "HID VertX控制器扫描行为"
+      - "出现HID VertX控制器扫描"
+    cve: "CVE-2012-4725 / CVE-2013-0127"
+    cvss: 9.8
+    severity: "严重"
+    affected: "HID VertX / Edge 门禁控制器系列"
+    principle: >
+      HID VertX 是广泛使用的物理门禁控制系统。攻击者通过 UDP 4070 端口发送
+      "discover;013;" 协议命令扫描网络中可达的 HID VertX 设备。
+      该设备存在多个严重漏洞：CVE-2012-4725（未授权远程命令执行）、
+      CVE-2013-0127（权限提升）、默认凭据及不安全的 Telnet 服务。
+      扫描源 IP 集中在 66.132.186.x、199.45.154.x 等段，为已知恶意扫描基础设施。
+    detection_indicators:
+      - "UDP 4070 端口"
+      - "payload: discover;013;"
+      - "行为: 单源IP连接大量不同目标IP的4070端口"
+      - "源IP段: 66.132.186.0/24, 199.45.154.0/24, 93.174.95.0/24"
+    recommendation_level: "建议"
+    recommendation_reason: "CVSS 9.8，已在野利用，涉及物理安全设备。应在1个月内完善检测规则。"
+    rule_example: |
+      alert udp $EXTERNAL_NET any -> $HOME_NET 4070 (
+        msg:"HID VertX Controller Discovery Scan";
+        content:"discover;013;";
+        depth:14;
+        classtype:attempted-recon;
+        sid:1000002; rev:1;
+      )
+    references:
+      - "https://nvd.nist.gov/vuln/detail/CVE-2012-4725"
+
+  - name: "D-Link UPnP SOAP 命令注入"
+    match_events:
+      - "D-Link UPnP SOAP命令执行攻击"
+    cve: "CVE-2013-2670 / CVE-2020-15894"
+    cvss: 9.8
+    severity: "严重"
+    affected: "D-Link 路由器（DIR系列、DSL系列等）"
+    principle: >
+      D-Link部分路由器的UPnP SOAP接口存在命令注入漏洞。攻击者向 /soap.cgi 发送
+      包含恶意XML的SOAP请求，在 AddPortMapping 操作的
+      NewPortMappingDescription 参数中注入系统命令。
+      攻击特征：User-Agent 非浏览器标准值（如 "Hello, World"），
+      目标路径 /soap.cgi?service=WANIPConn1，SOAPAction 含 AddPortMapping。
+    detection_indicators:
+      - "POST /soap.cgi"
+      - "SOAPAction 含 AddPortMapping"
+      - "User-Agent 非浏览器标准值"
+      - "请求体含 <NewPortMappingDescription> 注入payload"
+    recommendation_level: "建议"
+    recommendation_reason: "CVSS 9.8，无需认证。在 BYOD 场景下仍有风险。1个月内加入检测。"
+    rule_example: |
+      alert http $EXTERNAL_NET any -> $HOME_NET any (
+        msg:"D-Link UPnP SOAP Command Injection";
+        flow:to_server,established;
+        content:"POST"; http_method;
+        content:"/soap.cgi"; http_uri;
+        content:"AddPortMapping"; http_client_body;
+        content:"NewPortMappingDescription"; http_client_body;
+        classtype:web-application-attack;
+        sid:1000003; rev:1;
+      )
+    references:
+      - "https://nvd.nist.gov/vuln/detail/CVE-2013-2670"
+
+  - name: "Apache HTTPD 多后缀名解析绕过"
+    match_events:
+      - "Apache HTTPD多后缀解析攻击或敏感文件扫描"
+    cve: "CVE-2017-15715"
+    cvss: 7.5
+    severity: "高危"
+    affected: "Apache HTTPD 2.4.0 - 2.4.29"
+    principle: >
+      Apache HTTPD 在处理多后缀文件名时存在解析漏洞。攻击者可通过构造如
+      shell.php.jpg 或 config.php.js 等文件名绕过文件类型限制，
+      使Apache将非PHP文件以PHP方式解析执行。攻击者常利用此漏洞上传Webshell。
+    detection_indicators:
+      - "URL 含 .php. 后缀（如 .php.jpg, .php.js, .php.txt）"
+      - "响应码 200 + Content-Type 非 image/text"
+      - "请求路径在 upload/dfiles/attachments 等文件目录下"
+    recommendation_level: "建议"
+    recommendation_reason: "CVSS 7.5，利用简单，Apache 作为主流 Web 服务器影响面广。1个月内加入。"
+    rule_example: |
+      alert http $EXTERNAL_NET any -> $HOME_NET any (
+        msg:"Apache Multi-Suffix Parsing Bypass";
+        flow:to_server,established;
+        content:".php."; http_uri;
+        pcre:"/\.php\.(jpg|jpeg|png|gif|txt|js|css)/i";
+        classtype:web-application-attack;
+        sid:1000004; rev:1;
+      )
+    references:
+      - "https://nvd.nist.gov/vuln/detail/CVE-2017-15715"
+
+  - name: "IMAP/SMTP 弱口令爆破"
+    match_events:
+      - "IMAP登录(弱口令)"
+      - "SMTP登录(弱口令)"
+    cve: "N/A"
+    cvss: 7.5
+    severity: "高危"
+    affected: "IMAP/SMTP 邮件服务"
+    principle: >
+      攻击者对 IMAP (143/993) 和 SMTP (25/587) 服务进行弱口令爆破，
+      尝试使用常见用户名/密码组合登录邮件账户。
+      成功后可能获取邮箱内容、发送钓鱼邮件或作为跳板进行进一步攻击。
+    detection_indicators:
+      - "同源IP短时间内多次IMAP/SMTP认证失败"
+      - "尝试常见弱口令: admin/test/123456/password 等"
+      - "异常登录时间/地理位置"
+    recommendation_level: "建议"
+    recommendation_reason: "邮件账户是企业核心资产，弱口令爆破是常见攻击手法。1个月内补充。"
+    rule_example: |
+      # 建议通过认证失败次数阈值触发告警
+      # 对IMAP(143/993)和SMTP(25/587)端口增加暴力破解检测
+    references: []
+
+  - name: "Laravel .env 敏感信息泄露"
+    match_events:
+      - "Laravel Framework env配置文件敏感信息泄露攻击(CVE-2017-16894)"
+    cve: "CVE-2017-16894"
+    cvss: 7.5
+    severity: "高危"
+    affected: "Laravel Framework"
+    principle: >
+      Laravel 框架的 .env 配置文件包含数据库密码、APP_KEY、邮件服务凭据等
+      敏感信息。当 Web 服务器配置不当导致 .env 文件可直接通过 HTTP 访问时，
+      攻击者可直接读取这些凭据。
+    detection_indicators:
+      - "URL 路径含 .env"
+      - "响应体含 DB_PASSWORD / APP_KEY / MAIL_PASSWORD 等关键词"
+    recommendation_level: "建议"
+    recommendation_reason: ".env 泄露可直接导致数据库和应用被完全控制。1个月内加入。"
+    rule_example: |
+      alert http $EXTERNAL_NET any -> $HOME_NET any (
+        msg:"Laravel .env File Access Attempt";
+        flow:to_server,established;
+        content:".env"; http_uri;
+        content:"DB_PASSWORD"; http_server_body;
+        classtype:policy-violation;
+        sid:1000005; rev:1;
+      )
+    references:
+      - "https://nvd.nist.gov/vuln/detail/CVE-2017-16894"
