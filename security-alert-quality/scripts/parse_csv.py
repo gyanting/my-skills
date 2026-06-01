@@ -84,6 +84,40 @@ def parse_line_count(path):
         return sum(1 for _ in f)
 
 
+def merge_json_output(existing_data, new_data):
+    """Merge new time-windowed data into existing output (same vendor, multiple CSVs)."""
+    for key, records in new_data.items():
+        if key in existing_data:
+            existing_data[key].extend(records)
+        else:
+            existing_data[key] = records
+    return existing_data
+
+
+def merge_integrity(existing, stats):
+    """Accumulate integrity stats across multiple CSV files for the same vendor."""
+    existing["total_file_lines"] += stats["total_lines"]
+    existing["parsed_rows"] += stats["parsed"]
+    existing["skipped_rows"] += stats["skipped"]
+    existing["unparsed_rows"] += stats.get("unparsed", 0)
+    existing["header_row"] += 1  # one header per file
+    existing["missing_required_field_count"] += stats["missing_required"]
+
+    for field, count in stats.get("field_missing_counts", {}).items():
+        existing["missing_field_details"][field] = \
+            existing["missing_field_details"].get(field, 0) + count
+
+    accounted = existing["parsed_rows"] + existing["skipped_rows"] + existing["unparsed_rows"] + existing["header_row"]
+    existing["accounted_total"] = accounted
+    existing["integrity_match"] = accounted == existing["total_file_lines"]
+
+    new_cols = set(stats.get("unresolved_columns", []))
+    existing_cols = set(existing.get("unresolved_columns", []))
+    existing["unresolved_columns"] = sorted(existing_cols | new_cols)
+
+    return existing
+
+
 def normalize_timestamp(val):
     """Try various timestamp formats → YYYY-MM-DD HH:mm:ss"""
     if not val or not val.strip():
@@ -295,11 +329,18 @@ def main():
     print(f"Vendor: {args.vendor}", file=sys.stderr)
 
     records, stats = parse_csv(args.input, args.vendor, chunk_size=args.chunk_size)
-    integrity = compute_integrity(stats)
 
     if records:
         json_data = build_json_output(records, args.vendor)
         output_file = os.path.join(args.output, f"{args.vendor}.json")
+
+        # Merge with existing output if this vendor has been seen before
+        if os.path.exists(output_file):
+            with open(output_file, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+            json_data = merge_json_output(existing, json_data)
+            print(f"Merged into existing: {output_file}", file=sys.stderr)
+
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(json_data, f, ensure_ascii=False, indent=2)
         print(f"Output: {output_file}", file=sys.stderr)
@@ -307,8 +348,16 @@ def main():
         print("Warning: No records parsed!", file=sys.stderr)
         output_file = None
 
-    # Write integrity report
+    integrity = compute_integrity(stats)
     integrity_file = os.path.join(args.output, f"{args.vendor}_integrity.json")
+
+    # Merge integrity report if it already exists
+    if os.path.exists(integrity_file):
+        with open(integrity_file, "r", encoding="utf-8") as f:
+            existing = json.load(f)
+        integrity = merge_integrity(existing, stats)
+        print(f"Merged integrity into existing: {integrity_file}", file=sys.stderr)
+
     with open(integrity_file, "w", encoding="utf-8") as f:
         json.dump(integrity, f, ensure_ascii=False, indent=2)
     print(f"Integrity: {integrity_file}", file=sys.stderr)
